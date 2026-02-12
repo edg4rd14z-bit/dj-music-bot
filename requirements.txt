@@ -1,2 +1,2 @@
+ytmusicapi>=1.2.1
 streamlit
-ytmusicapi
