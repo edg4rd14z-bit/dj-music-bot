@@ -3,50 +3,64 @@ import json
 import os
 from ytmusicapi import YTMusic
 
-st.set_page_config(page_title="Prueba Final", page_icon="🛠️")
-st.title("🛠️ Prueba de Conexión Directa")
+st.set_page_config(page_title="Music Generator", page_icon="🎵")
 
-# --- ZONA DE DATOS (PEGALOS AQUÍ DIRECTAMENTE) ---
-# No uses st.secrets por ahora. Ponlos aquí entre comillas.
-CLIENT_ID = "770238210054-mdperjbgt9b7626rmji8f36kudde13r4.apps.googleusercontent.com"
-CLIENT_SECRET = "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"
-REFRESH_TOKEN = "1//05P8UZpyrupdlCgYIARAAGAUSNwF-L9IrllvNh06JkFxLCVRoIIO2d5l0zgu6XOTb_Nt6Sxd1Z2NH9n4YR3Nymh86nNTchodtGdg" 
+# --- 1. RECUPERACIÓN DE DATOS ---
+# Usamos .get() y .strip() para limpiar errores de espacios invisibles
+c_id = st.secrets.get("auth_client_id", "").strip()
+c_secret = st.secrets.get("auth_client_secret", "").strip()
+r_token = st.secrets.get("auth_refresh_token", "").strip()
 
-# --- GENERADOR DE ARCHIVO ---
-st.write("Generando archivo de autenticación...")
+# --- 2. DIAGNÓSTICO DE SEGURIDAD ---
+if not c_id or not c_secret or not r_token:
+    st.error("❌ ERROR FATAL: No se encuentran los secretos.")
+    st.info("Asegúrate de que en 'Secrets' usaste: auth_client_id, auth_client_secret, auth_refresh_token")
+    st.stop()
 
-datos_json = {
-    "client_id": CLIENT_ID.strip(),
-    "client_secret": CLIENT_SECRET.strip(),
-    "refresh_token": REFRESH_TOKEN.strip(),
+# --- 3. CONSTRUCCIÓN QUIRÚRGICA DEL JSON ---
+# Aquí forzamos los nombres de las claves. Es imposible que falle el nombre aquí.
+credenciales_limpias = {
+    "client_id": c_id,         # La librería EXIGE "client_id"
+    "client_secret": c_secret, # La librería EXIGE "client_secret"
+    "refresh_token": r_token,  # La librería EXIGE "refresh_token"
     "token_type": "Bearer"
 }
 
-# Verificación visual (Censurada) para que veas si se pegaron bien
-st.code(f"""
-Datos que se van a usar:
-ID: {datos_json['client_id'][:10]}...
-Secret: {datos_json['client_secret'][:5]}...
-Token: {datos_json['refresh_token'][:10]}...
-""")
+# --- 4. ESCRITURA DEL ARCHIVO ---
+archivo_final = "oauth_final.json"
+try:
+    with open(archivo_final, 'w') as f:
+        json.dump(credenciales_limpias, f)
+except Exception as e:
+    st.error(f"No se pudo crear el archivo: {e}")
+    st.stop()
+
+# --- 5. CONEXIÓN ---
+st.title("🎵 DJ Automático")
 
 try:
-    # 1. Borramos cualquier versión vieja
-    if os.path.exists('oauth.json'):
-        os.remove('oauth.json')
-        
-    # 2. Creamos el archivo nuevo
-    with open('oauth.json', 'w') as f:
-        json.dump(datos_json, f, indent=4) # Indent ayuda a que sea legible
-        
-    # 3. Intentamos conectar
-    yt = YTMusic('oauth.json')
+    # Inicializamos la librería con el archivo recién horneado
+    yt = YTMusic(archivo_final)
+    st.success("✅ Conexión establecida correctamente con Google.")
     
-    st.balloons()
-    st.success("✅ ¡CONEXIÓN EXITOSA! El problema eran los Secrets.")
-    st.write("Ahora sabemos que tus credenciales funcionan.")
-    
+    # -- AQUÍ VA TU FORMULARIO DE SIEMPRE --
+    with st.form("playlist_form"):
+        tematica = st.text_input("Temática", "Gym Rock")
+        submitted = st.form_submit_button("Crear Playlist")
+        
+        if submitted:
+            # Tu lógica de búsqueda...
+            st.write(f"Buscando canciones para: {tematica}...")
+            # (Pega aquí tu lógica de búsqueda search/create_playlist)
+
 except Exception as e:
-    st.error("🛑 SIGUE FALLANDO")
-    st.error(f"Error: {e}")
-    st.write("Si esto falla, el problema es 100% que el Client ID o Secret están mal copiados de Google Cloud, o el Token ya caducó.")
+    st.error("🛑 ERROR DE AUTENTICACIÓN")
+    st.write("Detalles técnicos del error:")
+    st.code(str(e))
+    
+    st.warning("🔍 REVISIÓN DE CONTENIDO (CENSURADO):")
+    st.json({
+        "client_id_length": len(c_id),
+        "client_secret_length": len(c_secret),
+        "refresh_token_start": r_token[:10] + "..."
+    })
