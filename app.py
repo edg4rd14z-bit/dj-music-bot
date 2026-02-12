@@ -3,89 +3,50 @@ import json
 import os
 from ytmusicapi import YTMusic
 
-st.set_page_config(page_title="Modo Diagnóstico", page_icon="🕵️‍♂️")
-st.title("🕵️‍♂️ Diagnóstico de Credenciales")
+st.set_page_config(page_title="Prueba Final", page_icon="🛠️")
+st.title("🛠️ Prueba de Conexión Directa")
 
-st.write("Analizando configuración...")
+# --- ZONA DE DATOS (PEGALOS AQUÍ DIRECTAMENTE) ---
+# No uses st.secrets por ahora. Ponlos aquí entre comillas.
+CLIENT_ID = "770238210054-mdperjbgt9b7626rmji8f36kudde13r4.apps.googleusercontent.com"
+CLIENT_SECRET = "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"
+REFRESH_TOKEN = "1//05P8UZpyrupdlCgYIARAAGAUSNwF-L9IrllvNh06JkFxLCVRoIIO2d5l0zgu6XOTb_Nt6Sxd1Z2NH9n4YR3Nymh86nNTchodtGdg" 
 
-# 1. INTENTO DE RECUPERACIÓN DE DATOS
-# Buscamos las variables con nombres estándar
-c_id = st.secrets.get("client_id")
-c_secret = st.secrets.get("client_secret")
-r_token = st.secrets.get("refresh_token")
+# --- GENERADOR DE ARCHIVO ---
+st.write("Generando archivo de autenticación...")
 
-# 2. REPORTE DE ESTADO (Censurado)
-col1, col2, col3 = st.columns(3)
+datos_json = {
+    "client_id": CLIENT_ID.strip(),
+    "client_secret": CLIENT_SECRET.strip(),
+    "refresh_token": REFRESH_TOKEN.strip(),
+    "token_type": "Bearer"
+}
 
-with col1:
-    if c_id:
-        st.success(f"✅ Client ID detectado\n({str(c_id)[:5]}...)")
-    else:
-        st.error("❌ Client ID: NO ENCONTRADO")
+# Verificación visual (Censurada) para que veas si se pegaron bien
+st.code(f"""
+Datos que se van a usar:
+ID: {datos_json['client_id'][:10]}...
+Secret: {datos_json['client_secret'][:5]}...
+Token: {datos_json['refresh_token'][:10]}...
+""")
 
-with col2:
-    if c_secret:
-        st.success(f"✅ Secret detectado\n({str(c_secret)[:3]}...)")
-    else:
-        st.error("❌ Secret: NO ENCONTRADO")
-
-with col3:
-    if r_token:
-        st.success(f"✅ Token detectado\n({str(r_token)[:10]}...)")
-    else:
-        st.error("❌ Token: NO ENCONTRADO")
-
-# 3. SI FALTA ALGO, PARAMOS AQUÍ
-if not c_id or not c_secret or not r_token:
-    st.warning("⚠️ REVISIÓN NECESARIA: Ve a Settings > Secrets en Streamlit Cloud.")
-    st.code("""
-# El formato correcto debe ser:
-client_id = "tu-id-de-google..."
-client_secret = "tu-secreto..."
-refresh_token = "tu-token-largo..."
-    """, language="toml")
-    st.stop()
-
-# 4. INTENTO DE GENERACIÓN DE ARCHIVO
 try:
-    datos_json = {
-        "client_id": c_id.strip().replace('"', ''), # Limpieza extra
-        "client_secret": c_secret.strip().replace('"', ''),
-        "refresh_token": r_token.strip().replace('"', ''),
-        "token_type": "Bearer"
-    }
-    
+    # 1. Borramos cualquier versión vieja
+    if os.path.exists('oauth.json'):
+        os.remove('oauth.json')
+        
+    # 2. Creamos el archivo nuevo
     with open('oauth.json', 'w') as f:
-        json.dump(datos_json, f, indent=4)
-    
-    st.info("Archivo 'oauth.json' generado internamente.")
-    
-    # Muestra el contenido que va a intentar usar (CENSURADO)
-    st.text("Contenido que se enviará a YouTube Music:")
-    st.json({
-        "client_id": datos_json["client_id"][:10] + "...",
-        "client_secret": datos_json["client_secret"][:5] + "...",
-        "refresh_token": datos_json["refresh_token"][:20] + "..."
-    })
-
-except Exception as e:
-    st.error(f"Error escribiendo archivo: {e}")
-    st.stop()
-
-# 5. PRUEBA DE FUEGO: CONEXIÓN
-st.write("---")
-st.write("🔄 Intentando conectar con YouTube Music...")
-
-try:
+        json.dump(datos_json, f, indent=4) # Indent ayuda a que sea legible
+        
+    # 3. Intentamos conectar
     yt = YTMusic('oauth.json')
+    
     st.balloons()
-    st.success("✨ ¡ÉXITO! LA CONEXIÓN FUNCIONA ✨")
-    st.write("Ahora ya puedes volver a poner el código de la Playlist.")
+    st.success("✅ ¡CONEXIÓN EXITOSA! El problema eran los Secrets.")
+    st.write("Ahora sabemos que tus credenciales funcionan.")
     
 except Exception as e:
-    st.error("🛑 FALLÓ LA CONEXIÓN")
-    st.error(f"Mensaje de error: {e}")
-    st.write("Esto significa que los datos están ahí, pero Google los rechaza.")
-    st.write("Posibles causas:")
-    st.write("1. El Client ID o Secret no coinciden con el proyecto de Google Cloud.")
-    st.write("2. El Refresh Token ya caducó o pertenece a otra cuenta.")
+    st.error("🛑 SIGUE FALLANDO")
+    st.error(f"Error: {e}")
+    st.write("Si esto falla, el problema es 100% que el Client ID o Secret están mal copiados de Google Cloud, o el Token ya caducó.")
