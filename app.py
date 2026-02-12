@@ -41,7 +41,6 @@ except Exception as e:
 
 # --- AQUÍ EMPIEZA TU APP NORMAL ---
 # (Pega aquí el resto de tu código del formulario y la lógica de búsqueda)
-with st.form("playlist_form"):
     # ... el resto de tu código ...
 # --- INTERFAZ DE USUARIO ---
 with st.form("playlist_form"):
