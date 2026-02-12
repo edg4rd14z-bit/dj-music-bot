@@ -1,58 +1,58 @@
 import streamlit as st
 import json
-import time
+import os
 from ytmusicapi import YTMusic
 
-# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="AI DJ Mix", page_icon="🎵")
 st.title("🎵 Generador de Playlists")
 
-# --- 1. RECUPERACIÓN DE DATOS ---
+# --- 1. RECUPERACIÓN DE DATOS (SECRETS) ---
+# Recuperamos tus datos de los Secrets de Streamlit
 c_id = st.secrets.get("mi_client_id", "").strip().replace('"', '')
 c_secret = st.secrets.get("mi_client_secret", "").strip().replace('"', '')
 r_token = st.secrets.get("mi_refresh_token", "").strip().replace('"', '')
 
+# Verificación de seguridad
 if not c_id or not c_secret or not r_token:
-    st.error("❌ Faltan credenciales en los Secrets.")
+    st.error("❌ Faltan datos en los Secrets. Asegúrate de tener: mi_client_id, mi_client_secret, mi_refresh_token")
     st.stop()
 
-# --- 2. CREACIÓN DEL ARCHIVO MAESTRO (SOLUCIÓN AL ERROR) ---
+# --- 2. LA SOLUCIÓN AL ERROR ---
 try:
-    # Aquí está la clave: Le damos TODOS los campos, incluso los que no tenemos
-    datos_completos = {
-        "client_id": c_id,
-        "client_secret": c_secret,
+    # PASO A: Creamos el archivo 'auth.json'
+    # Aunque le falten datos, este archivo sirve de base
+    datos_base = {
         "refresh_token": r_token,
-        "token_type": "Bearer",
-        # Estos son los 3 campos que faltaban y provocaban el error:
-        "scope": "https://www.googleapis.com/auth/youtube",
-        "access_token": "",  # Lo dejamos vacío, la librería lo generará sola
-        "expires_in": 0,
-        "expires_at": 0
+        "token_type": "Bearer"
+    }
+    
+    with open('auth.json', 'w') as f:
+        json.dump(datos_base, f)
+
+    # PASO B: Preparamos las credenciales por separado
+    # Esto es EXACTAMENTE lo que pide el error ("oauth_credentials")
+    mis_credenciales = {
+        "client_id": c_id,
+        "client_secret": c_secret
     }
 
-    archivo_oauth = 'oauth_final.json'
+    # PASO C: Conexión Explícita
+    # Le pasamos el archivo (1er argumento) Y las credenciales (2do argumento)
+    yt = YTMusic('auth.json', oauth_credentials=mis_credenciales)
     
-    # Escribimos el archivo completo
-    with open(archivo_oauth, 'w') as f:
-        json.dump(datos_completos, f)
-
-    # --- 3. CONEXIÓN ---
-    # Ya no necesitamos pasar credenciales aparte, porque el archivo ya las tiene todas
-    yt = YTMusic(archivo_oauth)
-    st.success("✅ ¡CONEXIÓN EXITOSA! (Sistema listo)")
+    st.success("✅ ¡CONEXIÓN ESTABLECIDA CON ÉXITO!")
 
 except Exception as e:
-    st.error("🛑 Error inesperado:")
-    st.code(str(e))
+    st.error("🛑 Error Final:")
+    st.write(e)
     st.stop()
 
-# --- 4. FORMULARIO Y LÓGICA ---
+# --- 3. TU APLICACIÓN ---
 st.write("---")
 with st.form("playlist_form"):
     col1, col2 = st.columns(2)
     with col1:
-        tematica = st.text_input("Temática / Vibe", placeholder="Ej: Correr por la playa")
+        tematica = st.text_input("Temática / Vibe", placeholder="Ej: Roadtrip con amigos")
     with col2:
         cantidad = st.slider("Cantidad", 5, 50, 15)
     
@@ -70,7 +70,6 @@ if submitted and tematica:
             
             for i, genero in enumerate(lista_busqueda):
                 query = f"{tematica} {genero}".strip()
-                # Buscamos canciones
                 res = yt.search(query, filter="songs", limit=canciones_por_genero)
                 for item in res:
                     if 'videoId' in item:
@@ -80,16 +79,11 @@ if submitted and tematica:
             if video_ids:
                 video_ids = list(set(video_ids))
                 nombre = f"Mix: {tematica}"
-                # Creamos la playlist
-                pl_id = yt.create_playlist(title=nombre, description=f"Creado con AI. Vibe: {tematica}")
-                # Añadimos canciones
+                pl_id = yt.create_playlist(title=nombre, description=f"Vibe: {tematica}")
                 yt.add_playlist_items(pl_id, video_ids)
-                
                 st.balloons()
                 st.success(f"Playlist '{nombre}' creada con {len(video_ids)} canciones.")
-                st.info("Revisa tu YouTube Music en unos segundos.")
             else:
-                st.warning("No encontré canciones para esa búsqueda.")
-                
+                st.warning("No se encontraron canciones.")
         except Exception as e:
             st.error(f"Error creando la lista: {e}")
