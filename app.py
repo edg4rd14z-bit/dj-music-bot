@@ -1,31 +1,48 @@
 import streamlit as st
 import json
-import os
 from ytmusicapi import YTMusic
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="AI DJ Mix", page_icon="🎵")
 st.title("🎵 Generador de Playlists")
 
-# --- AUTENTICACIÓN (NUEVO MÉTODO) ---
+# --- AUTENTICACIÓN A PRUEBA DE FALLOS ---
 try:
-    # Buscamos la llave 'oauth_raw' que configuraste en los Secrets
-    if 'oauth_raw' in st.secrets:
-        # Leemos el texto y creamos el archivo oauth.json temporalmente
-        with open('oauth.json', 'w') as f:
-            f.write(st.secrets['oauth_raw'])
-        
-        # Conectamos
-        yt = YTMusic('oauth.json')
-        st.success("Conectado con tu cuenta de Google ✅")
-    else:
-        st.error("⚠️ No encontré la llave 'oauth_raw' en los Secrets.")
-        st.info("Asegúrate de que en Streamlit Secrets pusiste: oauth_raw = \"\"\" ... \"\"\"")
+    # 1. Recuperamos los datos sueltos de los Secrets
+    # Usamos .get() para evitar errores si falta alguno
+    c_id = st.secrets.get("client_id")
+    c_secret = st.secrets.get("client_secret")
+    r_token = st.secrets.get("refresh_token")
+
+    if not c_id or not c_secret or not r_token:
+        st.error("❌ Faltan credenciales en Streamlit Secrets.")
+        st.warning("Asegúrate de tener: client_id, client_secret y refresh_token definidos en el TOML.")
         st.stop()
+
+    # 2. Construimos el JSON CORRECTO manualmente
+    # Aquí forzamos los nombres correctos 'client_id' y 'client_secret'
+    oauth_credentials = {
+        "client_id": c_id,
+        "client_secret": c_secret,
+        "refresh_token": r_token,
+        "token_type": "Bearer"
+    }
+
+    # 3. Guardamos el archivo temporalmente
+    with open('oauth.json', 'w') as f:
+        json.dump(oauth_credentials, f)
+
+    # 4. Iniciamos sesión
+    yt = YTMusic('oauth.json')
+    st.success("✅ Conexión establecida correctamente")
+
 except Exception as e:
-    st.error(f"Error de autenticación: {e}")
+    st.error(f"Error crítico de autenticación: {e}")
     st.stop()
 
+# --- AQUÍ EMPIEZA TU APP NORMAL ---
+# (Pega aquí el resto de tu código del formulario y la lógica de búsqueda)
+with st.form("playlist_form"):
+    # ... el resto de tu código ...
 # --- INTERFAZ DE USUARIO ---
 with st.form("playlist_form"):
     col1, col2 = st.columns(2)
