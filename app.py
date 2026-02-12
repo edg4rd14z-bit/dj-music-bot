@@ -3,105 +3,89 @@ import json
 import os
 from ytmusicapi import YTMusic
 
-# --- 1. CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="AI DJ Mix", page_icon="🎵")
-st.title("🎵 Generador de Playlists")
+st.set_page_config(page_title="Modo Diagnóstico", page_icon="🕵️‍♂️")
+st.title("🕵️‍♂️ Diagnóstico de Credenciales")
 
-# --- 2. AUTENTICACIÓN BLINDADA (Auto-Corrección) ---
-st.subheader("🔐 Estado de la Conexión")
+st.write("Analizando configuración...")
 
-try:
-    # RECUPERAR DATOS (Usamos .get para que no falle si falta alguno)
-    # .strip() quita espacios en blanco al inicio/final
-    # .replace('"', '') quita comillas extra si se colaron por error
-    c_id = str(st.secrets.get("mi_client_id", "")).strip().replace('"', '')
-    c_secret = str(st.secrets.get("mi_client_secret", "")).strip().replace('"', '')
-    r_token = str(st.secrets.get("mi_refresh_token", "")).strip().replace('"', '')
+# 1. INTENTO DE RECUPERACIÓN DE DATOS
+# Buscamos las variables con nombres estándar
+c_id = st.secrets.get("client_id")
+c_secret = st.secrets.get("client_secret")
+r_token = st.secrets.get("refresh_token")
 
-    # VERIFICACIÓN VISUAL (Solo para ti, censurada por seguridad)
-    if not c_id or not c_secret or not r_token:
-        st.error("❌ Faltan datos en los Secrets de Streamlit.")
-        st.stop()
-    
-    # CONSTRUCCIÓN DEL JSON LIMPIO
-    # Esto asegura que el archivo tenga el formato PERFECTO que exige la librería
-    datos_auth = {
-        "client_id": c_id,
-        "client_secret": c_secret,
-        "refresh_token": r_token,
-        "token_type": "Bearer"
-    }
+# 2. REPORTE DE ESTADO (Censurado)
+col1, col2, col3 = st.columns(3)
 
-    # ESCRIBIR EL ARCHIVO TEMPORAL
-    archivo_auth = 'auth.json'
-    with open(archivo_auth, 'w') as f:
-        json.dump(datos_auth, f)
+with col1:
+    if c_id:
+        st.success(f"✅ Client ID detectado\n({str(c_id)[:5]}...)")
+    else:
+        st.error("❌ Client ID: NO ENCONTRADO")
 
-    # CONECTAR CON YOUTUBE MUSIC
-    yt = YTMusic(archivo_auth)
-    st.success("✅ Conexión establecida correctamente.")
+with col2:
+    if c_secret:
+        st.success(f"✅ Secret detectado\n({str(c_secret)[:3]}...)")
+    else:
+        st.error("❌ Secret: NO ENCONTRADO")
 
-except Exception as e:
-    st.error("🛑 Error de Autenticación:")
-    st.code(str(e))
-    st.warning("Revisa que en tus Secrets de Streamlit tengas los nombres exactos: mi_client_id, mi_client_secret, mi_refresh_token")
+with col3:
+    if r_token:
+        st.success(f"✅ Token detectado\n({str(r_token)[:10]}...)")
+    else:
+        st.error("❌ Token: NO ENCONTRADO")
+
+# 3. SI FALTA ALGO, PARAMOS AQUÍ
+if not c_id or not c_secret or not r_token:
+    st.warning("⚠️ REVISIÓN NECESARIA: Ve a Settings > Secrets en Streamlit Cloud.")
+    st.code("""
+# El formato correcto debe ser:
+client_id = "tu-id-de-google..."
+client_secret = "tu-secreto..."
+refresh_token = "tu-token-largo..."
+    """, language="toml")
     st.stop()
 
-# --- 3. INTERFAZ DE USUARIO ---
-st.write("---")
-with st.form("playlist_form"):
-    col1, col2 = st.columns(2)
-    with col1:
-        tematica = st.text_input("Temática / Vibe", placeholder="Ej: Gym Motivación, Cena Romántica")
-    with col2:
-        cantidad = st.slider("Cantidad de canciones", 5, 50, 20)
-
-    generos = st.multiselect(
-        "Géneros (opcional)",
-        ["Pop", "Rock", "Indie", "Hip Hop", "Electronic", "Reggaeton", "Jazz", "Metal", "Lo-Fi", "Latino"]
-    )
+# 4. INTENTO DE GENERACIÓN DE ARCHIVO
+try:
+    datos_json = {
+        "client_id": c_id.strip().replace('"', ''), # Limpieza extra
+        "client_secret": c_secret.strip().replace('"', ''),
+        "refresh_token": r_token.strip().replace('"', ''),
+        "token_type": "Bearer"
+    }
     
-    submitted = st.form_submit_button("🔥 Crear Playlist")
+    with open('oauth.json', 'w') as f:
+        json.dump(datos_json, f, indent=4)
+    
+    st.info("Archivo 'oauth.json' generado internamente.")
+    
+    # Muestra el contenido que va a intentar usar (CENSURADO)
+    st.text("Contenido que se enviará a YouTube Music:")
+    st.json({
+        "client_id": datos_json["client_id"][:10] + "...",
+        "client_secret": datos_json["client_secret"][:5] + "...",
+        "refresh_token": datos_json["refresh_token"][:20] + "..."
+    })
 
-# --- 4. LÓGICA DEL DJ ---
-if submitted and tematica:
-    with st.spinner(f'Buscando canciones para "{tematica}"...'):
-        try:
-            video_ids = []
-            lista_busqueda = generos if generos else [""]
-            canciones_por_genero = max(1, cantidad // len(lista_busqueda))
+except Exception as e:
+    st.error(f"Error escribiendo archivo: {e}")
+    st.stop()
 
-            progress_bar = st.progress(0)
+# 5. PRUEBA DE FUEGO: CONEXIÓN
+st.write("---")
+st.write("🔄 Intentando conectar con YouTube Music...")
 
-            for i, genero in enumerate(lista_busqueda):
-                query = f"{tematica} {genero}".strip()
-                # Buscamos específicamente CANCIONES (filter='songs')
-                try:
-                    resultados = yt.search(query, filter="songs", limit=canciones_por_genero)
-                    for track in resultados:
-                        if 'videoId' in track:
-                            video_ids.append(track['videoId'])
-                except Exception as search_error:
-                    st.warning(f"Error buscando '{genero}': {search_error}")
-                
-                # Actualizar barra
-                progress_bar.progress((i + 1) / len(lista_busqueda))
-            
-            if video_ids:
-                # Eliminar duplicados y mezclar
-                video_ids = list(set(video_ids))
-                
-                nombre_playlist = f"Mix: {tematica}"
-                desc = f"Creado con AI DJ. Vibe: {tematica}. Géneros: {', '.join(generos)}"
-                
-                playlist_id = yt.create_playlist(title=nombre_playlist, description=desc)
-                yt.add_playlist_items(playlist_id, video_ids)
-                
-                st.balloons()
-                st.success(f"¡Éxito! Playlist '{nombre_playlist}' creada con {len(video_ids)} canciones.")
-                st.info("Revisa tu biblioteca de YouTube Music en unos segundos.")
-            else:
-                st.warning("No encontré canciones. Intenta términos más generales.")
-                
-        except Exception as e:
-            st.error(f"Error creando la lista: {e}")
+try:
+    yt = YTMusic('oauth.json')
+    st.balloons()
+    st.success("✨ ¡ÉXITO! LA CONEXIÓN FUNCIONA ✨")
+    st.write("Ahora ya puedes volver a poner el código de la Playlist.")
+    
+except Exception as e:
+    st.error("🛑 FALLÓ LA CONEXIÓN")
+    st.error(f"Mensaje de error: {e}")
+    st.write("Esto significa que los datos están ahí, pero Google los rechaza.")
+    st.write("Posibles causas:")
+    st.write("1. El Client ID o Secret no coinciden con el proyecto de Google Cloud.")
+    st.write("2. El Refresh Token ya caducó o pertenece a otra cuenta.")
