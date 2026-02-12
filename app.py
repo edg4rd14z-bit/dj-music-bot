@@ -3,64 +3,78 @@ import json
 import os
 from ytmusicapi import YTMusic
 
-st.set_page_config(page_title="Music Generator", page_icon="🎵")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="AI DJ Mix", page_icon="🎵")
+st.title("🎵 Generador de Playlists")
 
-# --- 1. RECUPERACIÓN DE DATOS ---
-# Usamos .get() y .strip() para limpiar errores de espacios invisibles
-c_id = st.secrets.get("auth_client_id", "").strip()
-c_secret = st.secrets.get("auth_client_secret", "").strip()
-r_token = st.secrets.get("auth_refresh_token", "").strip()
-
-# --- 2. DIAGNÓSTICO DE SEGURIDAD ---
-if not c_id or not c_secret or not r_token:
-    st.error("❌ ERROR FATAL: No se encuentran los secretos.")
-    st.info("Asegúrate de que en 'Secrets' usaste: auth_client_id, auth_client_secret, auth_refresh_token")
-    st.stop()
-
-# --- 3. CONSTRUCCIÓN QUIRÚRGICA DEL JSON ---
-# Aquí forzamos los nombres de las claves. Es imposible que falle el nombre aquí.
-credenciales_limpias = {
-    "client_id": c_id,         # La librería EXIGE "client_id"
-    "client_secret": c_secret, # La librería EXIGE "client_secret"
-    "refresh_token": r_token,  # La librería EXIGE "refresh_token"
-    "token_type": "Bearer"
-}
-
-# --- 4. ESCRITURA DEL ARCHIVO ---
-archivo_final = "oauth_final.json"
+# --- AUTENTICACIÓN BLINDADA ---
 try:
+    # 1. Recuperamos datos y limpiamos espacios o comillas extrañas
+    c_id = str(st.secrets.get("mi_client_id", "")).strip().replace('"', '')
+    c_secret = str(st.secrets.get("mi_client_secret", "")).strip().replace('"', '')
+    r_token = str(st.secrets.get("mi_refresh_token", "")).strip().replace('"', '')
+
+    # 2. Verificación rápida
+    if len(c_id) < 10 or len(c_secret) < 5:
+        st.error("❌ Error en Secrets: Los datos parecen estar vacíos o incompletos.")
+        st.stop()
+
+    # 3. CONSTRUCCIÓN MANUAL DEL JSON (La clave del éxito)
+    # Aquí forzamos los nombres exactos que la librería exige.
+    credenciales = {
+        "client_id": c_id,
+        "client_secret": c_secret,
+        "refresh_token": r_token,
+        "token_type": "Bearer"
+    }
+
+    # 4. Guardamos el archivo limpio
+    archivo_final = "oauth_final.json"
     with open(archivo_final, 'w') as f:
-        json.dump(credenciales_limpias, f)
+        json.dump(credenciales, f)
+
+    # 5. Conectamos
+    yt = YTMusic(archivo_final)
+    st.success("✅ Conectado con Google correctamente")
+
 except Exception as e:
-    st.error(f"No se pudo crear el archivo: {e}")
+    st.error("🛑 Error de conexión:")
+    st.code(str(e))
+    # Debug para ver si las claves existen (sin mostrar contraseñas)
+    st.warning("Diagnóstico de claves detectadas:")
+    st.write(f"- Client ID detectado: {'Sí' if c_id else 'No'}")
+    st.write(f"- Client Secret detectado: {'Sí' if c_secret else 'No'}")
     st.stop()
 
-# --- 5. CONEXIÓN ---
-st.title("🎵 DJ Automático")
+# --- FORMULARIO DE LA APP ---
+with st.form("playlist_form"):
+    tematica = st.text_input("Temática / Vibe", placeholder="Ej: Gym Motivación")
+    cantidad = st.slider("Cantidad", 5, 50, 20)
+    generos = st.multiselect("Géneros", ["Pop", "Rock", "Reggaeton", "Electronic", "Indie"])
+    submitted = st.form_submit_button("🔥 Crear Playlist")
 
-try:
-    # Inicializamos la librería con el archivo recién horneado
-    yt = YTMusic(archivo_final)
-    st.success("✅ Conexión establecida correctamente con Google.")
-    
-    # -- AQUÍ VA TU FORMULARIO DE SIEMPRE --
-    with st.form("playlist_form"):
-        tematica = st.text_input("Temática", "Gym Rock")
-        submitted = st.form_submit_button("Crear Playlist")
-        
-        if submitted:
-            # Tu lógica de búsqueda...
-            st.write(f"Buscando canciones para: {tematica}...")
-            # (Pega aquí tu lógica de búsqueda search/create_playlist)
+if submitted and tematica:
+    with st.spinner('El DJ está trabajando...'):
+        try:
+            video_ids = []
+            lista_busqueda = generos if generos else [""]
+            canciones_por_genero = max(1, cantidad // len(lista_busqueda))
 
-except Exception as e:
-    st.error("🛑 ERROR DE AUTENTICACIÓN")
-    st.write("Detalles técnicos del error:")
-    st.code(str(e))
-    
-    st.warning("🔍 REVISIÓN DE CONTENIDO (CENSURADO):")
-    st.json({
-        "client_id_length": len(c_id),
-        "client_secret_length": len(c_secret),
-        "refresh_token_start": r_token[:10] + "..."
-    })
+            for g in lista_busqueda:
+                query = f"{tematica} {g}".strip()
+                res = yt.search(query, filter="songs", limit=canciones_por_genero)
+                for item in res:
+                    if 'videoId' in item:
+                        video_ids.append(item['videoId'])
+            
+            if video_ids:
+                video_ids = list(set(video_ids)) # Sin duplicados
+                nombre = f"Mix: {tematica}"
+                pl_id = yt.create_playlist(title=nombre, description=f"Vibe: {tematica}")
+                yt.add_playlist_items(pl_id, video_ids)
+                st.balloons()
+                st.success(f"Playlist '{nombre}' creada con {len(video_ids)} canciones.")
+            else:
+                st.warning("No se encontraron canciones.")
+        except Exception as e:
+            st.error(f"Error creando la lista: {e}")
