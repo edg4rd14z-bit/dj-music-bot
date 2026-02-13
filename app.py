@@ -57,6 +57,7 @@ try:
 
     # --- 3. CONEXIÓN ---
     # Llamamos a la librería SOLO con el nombre del archivo
+    # Como el archivo ya tiene TODO dentro, no pedirá nada más.
     yt = YTMusic(archivo_oauth)
     
     st.success("✅ ¡CONEXIÓN EXITOSA! (Autenticación completa)")
